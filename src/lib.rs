@@ -1,8 +1,8 @@
 use std::cmp::Ord;
 // Trait aliasing for readibility
 // https://stackoverflow.com/questions/26070559/is-there-any-way-to-create-a-type-alias-for-multiple-traits
-pub trait SortTraits: Clone + Ord + std::fmt::Debug {}
-impl<T: Clone + Ord + std::fmt::Debug> SortTraits for T {} 
+pub trait SortTraits: Clone + Ord {}
+impl<T: Clone + Ord> SortTraits for T {} 
 
 pub struct SortVecPair<T: SortTraits> {
     bin_size: usize,
@@ -157,5 +157,11 @@ mod tests {
     fn sort_small_vec() {
         let test_vec = vec![15, 53, 1, 24, 3];
         assert_eq!(merge_sort(&test_vec), vec![1, 3, 15, 24, 53]);
+    }
+
+    #[test]
+    fn sort_small_vec_float() {
+        let test_vec = vec![15, 53, 1, 24, 25, 3];
+        assert_eq!(merge_sort(&test_vec), vec![1, 3, 15, 24, 25, 53]);
     }
 }
