@@ -1,8 +1,8 @@
 use std::cmp::Ord;
 // Trait aliasing for readibility
 // https://stackoverflow.com/questions/26070559/is-there-any-way-to-create-a-type-alias-for-multiple-traits
-pub trait SortTraits: Clone + Ord {}
-impl<T: Clone + Ord> SortTraits for T {} 
+pub trait SortTraits: Clone + Ord + std::fmt::Debug {}
+impl<T: Clone + Ord + std::fmt::Debug> SortTraits for T {} 
 
 pub struct SortVecPair<T: SortTraits> {
     bin_size: usize,
@@ -39,6 +39,10 @@ impl<'a, T: SortTraits> Iterator for SortVecPairIterMut<'a, T> {
             let bins = self.get_bins(self.index, self.index + bin_size, self.index + 2 * bin_size);
             self.index += 2 * bin_size;
             Some(bins)
+        } else if self.index + bin_size < self.vec_pair.length {
+            let bins = self.get_bins(self.index, self.index + bin_size, self.vec_pair.length);
+            self.index = self.vec_pair.length -1;
+            Some(bins)
         } else {
             None
         }
@@ -54,41 +58,17 @@ impl<T: SortTraits> SortVecPair<T> {
             buffer: unsorted_vec.to_vec(),
         }
     }
-
+    
     fn finish_merge(&mut self) {
-        // Merge the last bin if the array is not divisible
-        // into pairs of bins
-        // This is separate as this part cannot be parallelized
-        if let Some((bin1, bin2, buf)) = self.get_last_bins() {
-            merge_bins(bin1, bin2, buf);
-        }
         // Reinject the buffer in the values
         self.values = self.buffer.clone();
         // Double the bin size to prepare for the next merging iteration
         self.bin_size *= 2;
     }
 
-    fn get_last_bins(&mut self) -> Option<(&[T], &[T], &mut [T])> {
-        let remainder = self.get_length() % (2 * self.get_bin_size());
-        if remainder != 0 {
-            let end = self.get_length();
-            let mid = end - remainder;
-            let start = mid - 2 * self.get_bin_size();
-            // Updating the values vector with the sorted bin
-            self.values[start..mid].clone_from_slice(&self.buffer[start..mid]);
-            let (bin1, bin2, buffer) = self.into_iter().get_bins(start, mid, end);
-            Some((bin1, bin2, buffer))
-        } else {
-            None
-        }
-    }
 
     fn get_bin_size(&self) -> usize {
         self.bin_size
-    }
-
-    fn get_length(&self) -> usize {
-        self.length
     }
 
     fn get_values(self) -> Vec<T> {
@@ -116,11 +96,10 @@ impl<'a, T: SortTraits> SortVecPairIterMut<'a, T> {
 
 pub fn merge_sort<T: SortTraits>(input: &[T]) -> Vec<T> {
     let mut sort_vec_pair = SortVecPair::new(input);
-    while 2 * sort_vec_pair.get_bin_size() < input.len() {
+    while sort_vec_pair.get_bin_size() < input.len() {
         for (bin1, bin2, buf) in &mut sort_vec_pair {
             merge_bins(bin1, bin2, buf);
         }
-        // Merge remaining values.
         // Put merged bins from the buffer into the values
         // and increase the bins size.
         // Separate from the main operation
