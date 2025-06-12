@@ -1,19 +1,24 @@
 use std::cmp::Ord;
-pub struct SortVecPair<T: Clone + Ord> {
+// Trait aliasing for readibility
+// https://stackoverflow.com/questions/26070559/is-there-any-way-to-create-a-type-alias-for-multiple-traits
+pub trait SortTraits: Clone + Ord {}
+impl<T: Clone + Ord> SortTraits for T {} 
+
+pub struct SortVecPair<T: SortTraits> {
     bin_size: usize,
     length: usize,
     values: Vec<T>,
     buffer: Vec<T>,
 }
 
-pub struct SortVecPairIterMut<'a, T: Clone + Ord> {
+pub struct SortVecPairIterMut<'a, T: SortTraits> {
     vec_pair: &'a mut SortVecPair<T>,
     index: usize,
 }
 
 use std::iter::Iterator;
 
-impl<'a, T: Clone + Ord> IntoIterator for &'a mut SortVecPair<T> {
+impl<'a, T: SortTraits> IntoIterator for &'a mut SortVecPair<T> {
     type Item = (&'a [T], &'a [T], &'a mut [T]);
     type IntoIter = SortVecPairIterMut<'a, T>;
 
@@ -25,7 +30,7 @@ impl<'a, T: Clone + Ord> IntoIterator for &'a mut SortVecPair<T> {
     }
 }
 
-impl<'a, T: Clone + Ord> Iterator for SortVecPairIterMut<'a, T> {
+impl<'a, T: SortTraits> Iterator for SortVecPairIterMut<'a, T> {
     type Item = (&'a [T], &'a [T], &'a mut [T]);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -40,7 +45,7 @@ impl<'a, T: Clone + Ord> Iterator for SortVecPairIterMut<'a, T> {
     }
 }
 
-impl<T: Clone + Ord> SortVecPair<T> {
+impl<T: SortTraits> SortVecPair<T> {
     fn new(unsorted_vec: &[T]) -> SortVecPair<T> {
         SortVecPair {
             bin_size: 1,
@@ -91,7 +96,7 @@ impl<T: Clone + Ord> SortVecPair<T> {
     }
 }
 
-impl<'a, T: Clone + Ord> SortVecPairIterMut<'a, T> {
+impl<'a, T: SortTraits> SortVecPairIterMut<'a, T> {
     fn get_bins(
         &mut self,
         start: usize,
@@ -109,7 +114,7 @@ impl<'a, T: Clone + Ord> SortVecPairIterMut<'a, T> {
     }
 }
 
-pub fn merge_sort<T: Clone + Ord>(input: &[T]) -> Vec<T> {
+pub fn merge_sort<T: SortTraits>(input: &[T]) -> Vec<T> {
     let mut sort_vec_pair = SortVecPair::new(input);
     while 2 * sort_vec_pair.get_bin_size() < input.len() {
         for (bin1, bin2, buf) in &mut sort_vec_pair {
@@ -126,7 +131,7 @@ pub fn merge_sort<T: Clone + Ord>(input: &[T]) -> Vec<T> {
 }
 
 use std::cmp::Ordering;
-fn merge_bins<T: Clone + Ord>(bin1: &[T], bin2: &[T], buf: &mut [T]) {
+fn merge_bins<T: SortTraits>(bin1: &[T], bin2: &[T], buf: &mut [T]) {
     let mut id1 = 0;
     let mut id2 = 0;
     for min_val in buf {
