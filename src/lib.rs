@@ -1,8 +1,11 @@
-use std::cmp::Ord;
+use std::{
+    cmp::Ord,
+    thread,
+};
 // Trait aliasing for readibility
 // https://stackoverflow.com/questions/26070559/is-there-any-way-to-create-a-type-alias-for-multiple-traits
-pub trait SortTraits: Clone + Ord {}
-impl<T: Clone + Ord> SortTraits for T {} 
+pub trait SortTraits: Clone + Ord + Send + Sync {}
+impl<T: Clone + Ord + Send + Sync> SortTraits for T {} 
 
 pub struct SortVecPair<T: SortTraits> {
     bin_size: usize,
@@ -97,9 +100,11 @@ impl<'a, T: SortTraits> SortVecPairIterMut<'a, T> {
 pub fn merge_sort<T: SortTraits>(input: &[T]) -> Vec<T> {
     let mut sort_vec_pair = SortVecPair::new(input);
     while sort_vec_pair.get_bin_size() < input.len() {
-        for (bin1, bin2, buf) in &mut sort_vec_pair {
-            merge_bins(bin1, bin2, buf);
-        }
+        thread::scope(|s| {
+            for (bin1, bin2, buf) in &mut sort_vec_pair {
+                s.spawn(|| merge_bins(bin1, bin2, buf));
+            }
+        });
         // Put merged bins from the buffer into the values
         // and increase the bins size.
         // Separate from the main operation
