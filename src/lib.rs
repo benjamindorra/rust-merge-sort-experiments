@@ -100,6 +100,21 @@ impl<'a, T: SortTraits> SortVecPairIterMut<'a, T> {
 pub fn merge_sort<T: SortTraits>(input: &[T]) -> Vec<T> {
     let mut sort_vec_pair = SortVecPair::new(input);
     while sort_vec_pair.get_bin_size() < input.len() {
+        for (bin1, bin2, buf) in &mut sort_vec_pair {
+            merge_bins(bin1, bin2, buf);
+        }
+        // Put merged bins from the buffer into the values
+        // and increase the bins size.
+        // Separate from the main operation
+        // to ease threading.
+        sort_vec_pair.finish_merge();
+    }
+    sort_vec_pair.get_values()
+}
+
+pub fn merge_sort_parallel<T: SortTraits>(input: &[T]) -> Vec<T> {
+    let mut sort_vec_pair = SortVecPair::new(input);
+    while sort_vec_pair.get_bin_size() < input.len() {
         thread::scope(|s| {
             for (bin1, bin2, buf) in &mut sort_vec_pair {
                 s.spawn(|| merge_bins(bin1, bin2, buf));
