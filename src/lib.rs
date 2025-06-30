@@ -1,11 +1,12 @@
 use std::{
-    cmp::Ord,
+    cmp::PartialOrd,
     thread,
 };
+
 // Trait aliasing for readibility
 // https://stackoverflow.com/questions/26070559/is-there-any-way-to-create-a-type-alias-for-multiple-traits
-pub trait SortTraits: Clone + Ord + Send + Sync {}
-impl<T: Clone + Ord + Send + Sync> SortTraits for T {} 
+pub trait SortTraits: Clone + PartialOrd + Send + Sync {}
+impl<T: Clone + PartialOrd + Send + Sync> SortTraits for T {} 
 
 pub struct SortVecPair<T: SortTraits> {
     bin_size: usize,
@@ -129,7 +130,11 @@ pub fn merge_sort_parallel<T: SortTraits>(input: &[T]) -> Vec<T> {
     sort_vec_pair.get_values()
 }
 
-use std::cmp::Ordering;
+pub fn merge_sort_threadpool<T: SortTraits>(input: &[T], threads: usize) -> Vec<T> {
+    // Temporary return value to fail the test
+    vec![]
+}
+
 fn merge_bins<T: SortTraits>(bin1: &[T], bin2: &[T], buf: &mut [T]) {
     let mut id1 = 0;
     let mut id2 = 0;
@@ -143,15 +148,12 @@ fn merge_bins<T: SortTraits>(bin1: &[T], bin2: &[T], buf: &mut [T]) {
         } else {
             let val1 = bin1[id1].clone();
             let val2 = bin2[id2].clone();
-            match val1.cmp(&val2) {
-                Ordering::Less | Ordering::Equal => {
-                    *min_val = val1;
-                    id1 += 1;
-                }
-                Ordering::Greater => {
-                    *min_val = val2;
-                    id2 += 1;
-                }
+            if val1 <= val2 {
+                *min_val = val1;
+                id1 += 1;
+            } else {
+                *min_val = val2;
+                id2 += 1;
             }
         }
     }
@@ -178,10 +180,23 @@ mod tests {
         let test_vec = vec![15, 53, 1, 24, 3];
         assert_eq!(merge_sort(&test_vec), vec![1, 3, 15, 24, 53]);
     }
-
+    
     #[test]
     fn sort_small_vec_float() {
-        let test_vec = vec![15, 53, 1, 24, 25, 3];
-        assert_eq!(merge_sort(&test_vec), vec![1, 3, 15, 24, 25, 53]);
+        let test_vec = vec![15.1, 15.3, 53.2, 1.9, 1.5, 24.7, 3.2];
+        assert_eq!(merge_sort(&test_vec), vec![1.5, 1.9, 3.2, 15.1, 15.3, 24.7, 53.2]);
     }
+
+    #[test]
+    fn sort_small_vec_parallel() {
+        let test_vec = vec![15, 53, 1, 24, 25, 3];
+        assert_eq!(merge_sort_parallel(&test_vec), vec![1, 3, 15, 24, 25, 53]);
+    }
+
+    #[test]
+    fn sort_small_vec_threadpool() {
+        let test_vec = vec![15, 53, 1, 24, 25, 3];
+        assert_eq!(merge_sort_threadpool(&test_vec, 8), vec![1, 3, 15, 24, 25, 53]);
+    }
+
 }
