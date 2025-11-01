@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
@@ -66,12 +67,12 @@ impl<T: SortTraits> SortVecPair<T> {
         vec_pair: Arc<SortVecPair<T>>,
         end_prev: usize,
     ) -> Option<SortThreadData<T>> {
-        let bin_size = vec_pair.bin_size.lock().expect("coulkd not lock the bin size mutex");
+        let bin_size = vec_pair.bin_size.lock().expect("could not lock the bin size mutex");
         if end_prev + 2 * *bin_size < vec_pair.length {
             let bins_positions = BinsPositions {
                 start: end_prev,
                 mid: end_prev + *bin_size,
-                end: end_prev + 2 * *bin_size,
+                end: (end_prev + 2 * *bin_size).into(),
             };
             Some(SortThreadData {
                 vec_pair: Arc::clone(&vec_pair),
@@ -81,7 +82,7 @@ impl<T: SortTraits> SortVecPair<T> {
             let bins_positions = BinsPositions {
                 start: end_prev,
                 mid: end_prev + *bin_size,
-                end: vec_pair.length,
+                end: vec_pair.length.into(),
             };
             Some(SortThreadData {
                 vec_pair: Arc::clone(&vec_pair),
@@ -99,10 +100,46 @@ pub fn merge_sort_parallel<T: SortTraits>(input: &[T]) -> Vec<T> {
     while sort_vec_pair.get_bin_size() < input.len() {
         let mut handles_vec = Vec::new();
         let mut end_prev = 0;
-        while let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev)
+        while let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev.into())
         {
             end_prev = sort_thread_data.bins_positions.end.clone();
             let handle = thread::spawn(move || merge_bins(sort_thread_data));
+            handles_vec.push(handle);
+        }
+        for handle in handles_vec {
+            _ = handle.join();
+        }
+        // Copy buffer into values vector, increase bin size
+        sort_vec_pair.finish_merge();
+    }
+    sort_vec_pair.get_values()
+}
+
+// Attempt to simplify the threadpool approach to improve performance,
+// at the cost of reinstancing the threads at each iteration
+// Goal: go past the single threaded performance
+pub fn merge_sort_parallel_limit<T: SortTraits>(input: &[T], threads: usize) -> Vec<T> {
+    let sort_vec_pair = SortVecPair::new(input);
+    let sort_vec_pair = Arc::new(sort_vec_pair);
+    let input_length = input.len();
+    while sort_vec_pair.get_bin_size() < input_length {  
+        let end_prev = Arc::new(AtomicUsize::new(0));
+        let mut handles_vec = Vec::new();
+        for ct in 0..threads {
+            let sort_vec_pair = Arc::clone(&sort_vec_pair);
+            let end_prev = Arc::clone(&end_prev);
+            let handle = thread::spawn(move || {
+                let limit = if ct<(threads-1) {input_length/threads} else {input_length-end_prev.load(Ordering::SeqCst)};
+                for _ in 0..limit {
+                    match SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev.load(Ordering::SeqCst)) {
+                        Some(sort_thread_data) => {
+                            end_prev.store(sort_thread_data.bins_positions.end.clone(), Ordering::SeqCst);
+                            merge_bins(sort_thread_data);
+                        }
+                        None => break
+                    };
+                }
+            });
             handles_vec.push(handle);
         }
         for handle in handles_vec {
@@ -126,7 +163,7 @@ pub fn merge_sort_threadpool<T: SortTraits>(input: &[T], threads: usize) -> Vec<
         let mut end_prev = 0;
         while let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev)
         {
-            end_prev = sort_thread_data.bins_positions.end.clone();
+            end_prev = sort_thread_data.bins_positions.end;
             let task_progress_write = Arc::clone(&task_progress_write);
             threadpool.execute(move || {
                 merge_bins(sort_thread_data);
@@ -193,6 +230,15 @@ mod tests {
         assert_eq!(
             merge_sort_threadpool(&test_vec, 8),
             vec![1, 3, 15, 24, 25, 53]
+        );
+    }
+
+    #[test]
+    fn sort_small_vec_parallel_limit() {
+        let test_vec = vec![15, 53, 1, 24, 25, 3, 37, 12, 56];
+        assert_eq!(
+            merge_sort_parallel_limit(&test_vec, 8),
+            vec![1, 3, 12, 15, 24, 25, 37, 53, 56]
         );
     }
 }

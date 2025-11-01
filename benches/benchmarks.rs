@@ -1,11 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::hint::black_box;
 use merge_sort::{
-    single_core_sort::merge_sort,
     multicore_sort::{
-        merge_sort_parallel,
-        merge_sort_threadpool,
-    },
+        merge_sort_parallel, merge_sort_parallel_limit, merge_sort_threadpool
+    }, single_core_sort::merge_sort
 };
 
 pub fn sequential_sort_benchmark(c: &mut Criterion) {
@@ -35,6 +33,15 @@ pub fn threadpool_sort_benchmark(c: &mut Criterion) {
     c.bench_function("threadpool sort {size}", |b| b.iter(|| merge_sort_threadpool(black_box(&vec), 8)));
 }
 
-criterion_group!(benches, sequential_sort_benchmark, threadpool_sort_benchmark, parallel_sort_benchmark);
+pub fn parallel_limit_sort_benchmark(c: &mut Criterion) {
+    let size = 100000;
+    let mut vec: Vec<i32> = Vec::with_capacity(size);
+    for _ in 1..size {
+        vec.push(rand::random());
+    }
+    c.bench_function("parallel limit sort {size}", |b| b.iter(|| merge_sort_parallel_limit(black_box(&vec), 8)));
+}
+
+criterion_group!(benches, sequential_sort_benchmark, threadpool_sort_benchmark, parallel_limit_sort_benchmark, parallel_sort_benchmark);
 criterion_main!(benches);
 
