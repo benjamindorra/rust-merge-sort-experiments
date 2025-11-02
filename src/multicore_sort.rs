@@ -181,6 +181,53 @@ pub fn merge_sort_threadpool<T: SortTraits>(input: &[T], threads: usize) -> Vec<
     sort_vec_pair.get_values()
 }
 
+// Attempt to speed up the parallel processing by splitting the code into bigger tasks
+pub fn merge_sort_threadpool_chunks<T: SortTraits>(input: &[T], threads: usize) -> Vec<T> {
+    let sort_vec_pair = SortVecPair::new(input);
+    let sort_vec_pair = Arc::new(sort_vec_pair);
+    let threadpool = ThreadPool::new(threads);
+    let input_len = input.len();
+    while sort_vec_pair.get_bin_size() < input_len {
+        // Channel to keep track of the pool progress through the tasks
+        let (task_progress_write, task_progress_read) = mpsc::channel(); 
+        let task_progress_write = Arc::new(task_progress_write);
+        let mut num_tasks = 0;
+        let bin_size = sort_vec_pair.get_bin_size();
+        let merged_bins_size = 2*bin_size;
+        let num_ops_per_thread =  input_len/(merged_bins_size*(threads-1));
+        let num_ops_last_thread = input_len.div_ceil(merged_bins_size) - (threads-1) * num_ops_per_thread;
+        for ct in 0..threads {
+            let sort_vec_pair = Arc::clone(&sort_vec_pair);
+            let start = ct * num_ops_per_thread * bin_size;
+            let finish = if ct<(threads-1) {
+                start  + num_ops_per_thread * merged_bins_size
+            } else {
+                 start + num_ops_last_thread * merged_bins_size
+            };
+            let task_progress_write = Arc::clone(&task_progress_write);
+            threadpool.execute(move || {
+                let mut end_prev = start;
+                while end_prev < finish {
+                    if let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev) {
+                            merge_bins(sort_thread_data);
+                    };
+                    end_prev += merged_bins_size;
+                }
+                task_progress_write.send(()).unwrap();
+            });
+            num_tasks += 1;        
+        }
+        // Wait until the tasks finish
+        for _ in 0..num_tasks {
+            task_progress_read.recv().unwrap();
+        }
+        // Copy buffer into values vector, increase bin size
+        sort_vec_pair.finish_merge();
+    }
+    sort_vec_pair.get_values()
+}
+
+
 
 fn merge_bins<T: SortTraits>(sort_thread_data: SortThreadData<T>) {
     let SortThreadData {
@@ -238,6 +285,15 @@ mod tests {
         let test_vec = vec![15, 53, 1, 24, 25, 3, 37, 12, 56];
         assert_eq!(
             merge_sort_parallel_limit(&test_vec, 8),
+            vec![1, 3, 12, 15, 24, 25, 37, 53, 56]
+        );
+    }
+    
+    #[test]
+    fn sort_small_vec_threadpool_chunks() {
+        let test_vec = vec![15, 53, 1, 24, 25, 3, 37, 12, 56];
+        assert_eq!(
+            merge_sort_threadpool_chunks(&test_vec, 8),
             vec![1, 3, 12, 15, 24, 25, 37, 53, 56]
         );
     }
