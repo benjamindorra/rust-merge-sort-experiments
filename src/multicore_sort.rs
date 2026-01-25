@@ -41,18 +41,18 @@ impl<T: SortTraits> SortVecPair<T> {
     }
 
     fn finish_merge(&self) {
-        // Reinject the buffer in the values
-        for i in 0..self.length {
-            let mut val = self.values[i].lock().expect("Mutex lock error");
-            let buf = self.buffer[i].lock().expect("Mutex lock error");
-            *val = buf.clone();
-        }
         // Double the bin size to prepare for the next merging iteration
-        let mut bin_size = self.bin_size.lock().expect("Could not lock the bin size mutex");
+        let mut bin_size = self
+            .bin_size
+            .lock()
+            .expect("Could not lock the bin size mutex");
         *bin_size *= 2;
     }
     fn get_bin_size(&self) -> usize {
-        let bin_size = self.bin_size.lock().expect("Could not lock the bin size mutex");
+        let bin_size = self
+            .bin_size
+            .lock()
+            .expect("Could not lock the bin size mutex");
         *bin_size
     }
 
@@ -67,7 +67,10 @@ impl<T: SortTraits> SortVecPair<T> {
         vec_pair: Arc<SortVecPair<T>>,
         end_prev: usize,
     ) -> Option<SortThreadData<T>> {
-        let bin_size = vec_pair.bin_size.lock().expect("could not lock the bin size mutex");
+        let bin_size = vec_pair
+            .bin_size
+            .lock()
+            .expect("could not lock the bin size mutex");
         if end_prev + 2 * *bin_size < vec_pair.length {
             let bins_positions = BinsPositions {
                 start: end_prev,
@@ -100,7 +103,8 @@ pub fn merge_sort_parallel<T: SortTraits>(input: &[T]) -> Vec<T> {
     while sort_vec_pair.get_bin_size() < input.len() {
         let mut handles_vec = Vec::new();
         let mut end_prev = 0;
-        while let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev.into())
+        while let Some(sort_thread_data) =
+            SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev.into())
         {
             end_prev = sort_thread_data.bins_positions.end.clone();
             let handle = thread::spawn(move || merge_bins(sort_thread_data));
@@ -122,21 +126,31 @@ pub fn merge_sort_parallel_limit<T: SortTraits>(input: &[T], threads: usize) -> 
     let sort_vec_pair = SortVecPair::new(input);
     let sort_vec_pair = Arc::new(sort_vec_pair);
     let input_length = input.len();
-    while sort_vec_pair.get_bin_size() < input_length {  
+    while sort_vec_pair.get_bin_size() < input_length {
         let end_prev = Arc::new(AtomicUsize::new(0));
         let mut handles_vec = Vec::new();
         for ct in 0..threads {
             let sort_vec_pair = Arc::clone(&sort_vec_pair);
             let end_prev = Arc::clone(&end_prev);
             let handle = thread::spawn(move || {
-                let limit = if ct<(threads-1) {input_length/threads} else {input_length-end_prev.load(Ordering::SeqCst)};
+                let limit = if ct < (threads - 1) {
+                    input_length / threads
+                } else {
+                    input_length - end_prev.load(Ordering::SeqCst)
+                };
                 for _ in 0..limit {
-                    match SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev.load(Ordering::SeqCst)) {
+                    match SortVecPair::get_bins_positions(
+                        Arc::clone(&sort_vec_pair),
+                        end_prev.load(Ordering::SeqCst),
+                    ) {
                         Some(sort_thread_data) => {
-                            end_prev.store(sort_thread_data.bins_positions.end.clone(), Ordering::SeqCst);
+                            end_prev.store(
+                                sort_thread_data.bins_positions.end.clone(),
+                                Ordering::SeqCst,
+                            );
                             merge_bins(sort_thread_data);
                         }
-                        None => break
+                        None => break,
                     };
                 }
             });
@@ -157,11 +171,12 @@ pub fn merge_sort_threadpool<T: SortTraits>(input: &[T], threads: usize) -> Vec<
     let threadpool = ThreadPool::new(threads);
     while sort_vec_pair.get_bin_size() < input.len() {
         // Channel to keep track of the pool progress through the tasks
-        let (task_progress_write, task_progress_read) = mpsc::channel(); 
+        let (task_progress_write, task_progress_read) = mpsc::channel();
         let task_progress_write = Arc::new(task_progress_write);
         let mut num_tasks = 0;
         let mut end_prev = 0;
-        while let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev)
+        while let Some(sort_thread_data) =
+            SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev)
         {
             end_prev = sort_thread_data.bins_positions.end;
             let task_progress_write = Arc::clone(&task_progress_write);
@@ -189,33 +204,36 @@ pub fn merge_sort_threadpool_chunks<T: SortTraits>(input: &[T], threads: usize) 
     let input_len = input.len();
     while sort_vec_pair.get_bin_size() < input_len {
         // Channel to keep track of the pool progress through the tasks
-        let (task_progress_write, task_progress_read) = mpsc::channel(); 
+        let (task_progress_write, task_progress_read) = mpsc::channel();
         let task_progress_write = Arc::new(task_progress_write);
         let mut num_tasks = 0;
         let bin_size = sort_vec_pair.get_bin_size();
-        let merged_bins_size = 2*bin_size;
-        let num_ops_per_thread =  input_len/(merged_bins_size*(threads-1));
-        let num_ops_last_thread = input_len.div_ceil(merged_bins_size) - (threads-1) * num_ops_per_thread;
+        let merged_bins_size = 2 * bin_size;
+        let num_ops_per_thread = input_len / (merged_bins_size * (threads - 1));
+        let num_ops_last_thread =
+            input_len.div_ceil(merged_bins_size) - (threads - 1) * num_ops_per_thread;
         for ct in 0..threads {
             let sort_vec_pair = Arc::clone(&sort_vec_pair);
             let start = ct * num_ops_per_thread * bin_size;
-            let finish = if ct<(threads-1) {
-                start  + num_ops_per_thread * merged_bins_size
+            let finish = if ct < (threads - 1) {
+                start + num_ops_per_thread * merged_bins_size
             } else {
-                 start + num_ops_last_thread * merged_bins_size
+                start + num_ops_last_thread * merged_bins_size
             };
             let task_progress_write = Arc::clone(&task_progress_write);
             threadpool.execute(move || {
                 let mut end_prev = start;
                 while end_prev < finish {
-                    if let Some(sort_thread_data) = SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev) {
-                            merge_bins(sort_thread_data);
+                    if let Some(sort_thread_data) =
+                        SortVecPair::get_bins_positions(Arc::clone(&sort_vec_pair), end_prev)
+                    {
+                        merge_bins(sort_thread_data);
                     };
                     end_prev += merged_bins_size;
                 }
                 task_progress_write.send(()).unwrap();
             });
-            num_tasks += 1;        
+            num_tasks += 1;
         }
         // Wait until the tasks finish
         for _ in 0..num_tasks {
@@ -226,8 +244,6 @@ pub fn merge_sort_threadpool_chunks<T: SortTraits>(input: &[T], threads: usize) 
     }
     sort_vec_pair.get_values()
 }
-
-
 
 fn merge_bins<T: SortTraits>(sort_thread_data: SortThreadData<T>) {
     let SortThreadData {
@@ -259,6 +275,18 @@ fn merge_bins<T: SortTraits>(sort_thread_data: SortThreadData<T>) {
             }
         }
     }
+    // Reinject values in the sorted section of the values in parallel
+    // should be faster than doing it all on one thread at the end
+    let vals = &vec_pair.values[bins_positions.start..bins_positions.end];
+    for (v, b) in std::iter::zip(vals, buf) {
+        let mut vl = v
+            .lock()
+            .expect("Value within a sorted bin should be accessible and lockable");
+        let bl = b
+            .lock()
+            .expect("Buffer values within a sorted bin should be accessible and lockable");
+        *vl = bl.clone();
+    }
 }
 
 #[cfg(test)]
@@ -288,7 +316,7 @@ mod tests {
             vec![1, 3, 12, 15, 24, 25, 37, 53, 56]
         );
     }
-    
+
     #[test]
     fn sort_small_vec_threadpool_chunks() {
         let test_vec = vec![15, 53, 1, 24, 25, 3, 37, 12, 56];

@@ -1,12 +1,13 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use std::{hint::black_box, time::Duration};
+use criterion::{Criterion, criterion_group, criterion_main};
 use merge_sort::{
+    gpu_sort::merge_sort_gpu,
     multicore_sort::{
-        merge_sort_parallel, merge_sort_parallel_limit, merge_sort_threadpool, merge_sort_threadpool_chunks
+        merge_sort_parallel, merge_sort_parallel_limit, merge_sort_threadpool,
+        merge_sort_threadpool_chunks,
     },
     single_core_sort::merge_sort,
-    gpu_sort::merge_sort_gpu,
 };
+use std::{hint::black_box, time::Duration};
 const SIZE: usize = 1_000_000;
 
 pub fn sequential_sort_benchmark(c: &mut Criterion) {
@@ -15,7 +16,9 @@ pub fn sequential_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("sequential sort {size}", |b| b.iter(|| merge_sort(black_box(&vec))));
+    c.bench_function("sequential sort {size}", |b| {
+        b.iter(|| merge_sort(black_box(&vec)))
+    });
 }
 
 pub fn parallel_sort_benchmark(c: &mut Criterion) {
@@ -24,7 +27,9 @@ pub fn parallel_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("parallel sort {size}", |b| b.iter(|| merge_sort_parallel(black_box(&vec))));
+    c.bench_function("parallel sort {size}", |b| {
+        b.iter(|| merge_sort_parallel(black_box(&vec)))
+    });
 }
 
 pub fn threadpool_sort_benchmark(c: &mut Criterion) {
@@ -33,7 +38,9 @@ pub fn threadpool_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("threadpool sort {size}", |b| b.iter(|| merge_sort_threadpool(black_box(&vec), 8)));
+    c.bench_function("threadpool sort {size}", |b| {
+        b.iter(|| merge_sort_threadpool(black_box(&vec), 8))
+    });
 }
 
 pub fn parallel_limit_sort_benchmark(c: &mut Criterion) {
@@ -42,7 +49,9 @@ pub fn parallel_limit_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("parallel limit sort {size}", |b| b.iter(|| merge_sort_parallel_limit(black_box(&vec), 8)));
+    c.bench_function("parallel limit sort {size}", |b| {
+        b.iter(|| merge_sort_parallel_limit(black_box(&vec), 8))
+    });
 }
 
 pub fn threadpool_chunks_sort_benchmark(c: &mut Criterion) {
@@ -51,7 +60,9 @@ pub fn threadpool_chunks_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("threadpool sort in chunks {size}", |b| b.iter(|| merge_sort_threadpool_chunks(black_box(&vec), 8)));
+    c.bench_function("threadpool sort in chunks {size}", |b| {
+        b.iter(|| merge_sort_threadpool_chunks(black_box(&vec), 8))
+    });
 }
 
 pub fn gpu_sort_benchmark(c: &mut Criterion) {
@@ -60,7 +71,9 @@ pub fn gpu_sort_benchmark(c: &mut Criterion) {
     for _ in 1..size {
         vec.push(rand::random());
     }
-    c.bench_function("gpu merge sort {size}", |b| b.iter(|| merge_sort_gpu(black_box(vec.clone()))));
+    c.bench_function("gpu merge sort {size}", |b| {
+        b.iter(|| merge_sort_gpu(black_box(vec.clone())))
+    });
 }
 
 criterion_group!(
