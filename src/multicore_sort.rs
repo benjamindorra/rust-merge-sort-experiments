@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread;
 
 mod threadpool;
@@ -9,7 +9,7 @@ pub trait SortTraits: Clone + PartialOrd + Send + Sync + 'static {}
 impl<T: Clone + PartialOrd + Send + Sync + 'static> SortTraits for T {}
 
 struct SortVecPair<T: SortTraits> {
-    bin_size: Mutex<usize>,
+    bin_size: RwLock<usize>,
     length: usize,
     values: Vec<Mutex<T>>,
     buffer: Vec<Mutex<T>>,
@@ -32,7 +32,7 @@ impl<T: SortTraits> SortVecPair<T> {
             values.push(Mutex::new(val.clone()));
         }
         SortVecPair {
-            bin_size: Mutex::new(1),
+            bin_size: RwLock::new(1),
             length: unsorted_vec.len(),
             values: values,
             buffer: buffer,
@@ -43,14 +43,14 @@ impl<T: SortTraits> SortVecPair<T> {
         // Double the bin size to prepare for the next merging iteration
         let mut bin_size = self
             .bin_size
-            .lock()
+            .write()
             .expect("Could not lock the bin size mutex");
         *bin_size *= 2;
     }
     fn get_bin_size(&self) -> usize {
         let bin_size = self
             .bin_size
-            .lock()
+            .read()
             .expect("Could not lock the bin size mutex");
         *bin_size
     }
@@ -65,7 +65,7 @@ impl<T: SortTraits> SortVecPair<T> {
     fn get_bins_positions(vec_pair: Arc<SortVecPair<T>>, id: usize) -> Option<SortThreadData<T>> {
         let bin_size = *vec_pair
             .bin_size
-            .lock()
+            .read()
             .expect("could not lock the bin size mutex");
         let start = id * 2 * bin_size;
         let mid = start + bin_size;
